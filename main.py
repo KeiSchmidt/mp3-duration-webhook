@@ -1,36 +1,23 @@
-from fastapi import FastAPI, Request, HTTPException
-from mutagen.mp3 import MP3
-import tempfile, requests, os
+from flask import Flask, request, jsonify
 
-app = FastAPI()
-SECRET_TOKEN = os.getenv("WEBHOOK_SECRET", "changeme")
+app = Flask(__name__)
 
-@app.post("/get-duration")
-async def get_duration(request: Request):
-    headers = request.headers
-    token = headers.get("X-Webhook-Token", "")
-    if token != SECRET_TOKEN:
-        raise HTTPException(status_code=403, detail="Invalid token")
+@app.route("/", methods=["GET"])
+def home():
+    return "Webhook active!", 200
 
-    data = await request.json()
-    file_url = data.get("file_url")
-    if not file_url:
-        raise HTTPException(status_code=400, detail="file_url missing")
+@app.route("/lark-event", methods=["POST"])
+def lark_event():
+    data = request.get_json(force=True)
+    print("Received data:", data)
 
-    try:
-        resp = requests.get(file_url, stream=True, timeout=20)
-        resp.raise_for_status()
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
-            for chunk in resp.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
-            tmp_path = f.name
+    # ✅ Khi Lark gửi challenge để xác minh webhook
+    if "challenge" in data:
+        return jsonify({"challenge": data["challenge"]})
 
-        duration = int(MP3(tmp_path).info.length)
-        try:
-            os.remove(tmp_path)
-        except:
-            pass
-        return { "duration": duration }
-    except Exception as e:
-        return { "error": str(e) }
+    # ✅ Các event khác (ví dụ thêm bản ghi, sửa bản ghi)
+    return jsonify({"msg": "ok"})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
+
